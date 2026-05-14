@@ -1,0 +1,1065 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GeoMaster Quiz - Premium Edition</title>
+  
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  
+  <script src="https://unpkg.com/d3@7"></script>
+  <script src="https://unpkg.com/topojson-client@3"></script>
+</head>
+<body style="margin: 0; background-color: #050810;">
+  <div id="root"></div>
+
+  <script type="text/babel" data-type="module">
+    const { useState, useEffect, useRef, useCallback, useMemo } = React;
+
+    // ─── ISO ALPHA-2 → NUMERIC (world-atlas topojson IDs) ────────────────────────
+    const ALPHA2_TO_NUMERIC = {
+      "AF":4,"AR":32,"AU":36,"AT":40,"BE":56,"BR":76,"CA":124,"CN":156,
+      "CO":170,"HR":191,"CU":192,"CZ":203,"DK":208,"EG":818,"ET":231,
+      "FI":246,"FR":250,"DE":276,"GH":288,"GR":300,"IN":356,"ID":360,
+      "IR":364,"IQ":368,"IE":372,"IL":376,"IT":380,"JP":392,"JO":400,
+      "KE":404,"MX":484,"MA":504,"MZ":508,"NP":524,"NL":528,"NZ":554,
+      "NG":566,"NO":578,"PK":586,"PE":604,"PH":608,"PL":616,"PT":620,
+      "RO":642,"RU":643,"SA":682,"ZA":710,"KR":410,"ES":724,"SE":752,
+      "CH":756,"TH":764,"TR":792,"UA":804,"AE":784,"GB":826,"US":840,
+      "UZ":860,"VN":704,"YE":887,"ZM":894,"ZW":716,
+    };
+
+    // ─── COUNTRY DATA ─────────────────────────────────────────────────────────────
+    const COUNTRIES = [
+      { id:"AF", name:"Afghanistan", capital:"Kabul", continent:"Asia", population:38928, currency:"Afghan Afghani", languages:["Pashto","Dari"], funFact:"Afghanistan has been continuously inhabited for over 50,000 years." },
+      { id:"AR", name:"Argentina", capital:"Buenos Aires", continent:"Americas", population:45376, currency:"Argentine Peso", languages:["Spanish"], funFact:"Argentina is the 8th largest country in the world by area." },
+      { id:"AU", name:"Australia", capital:"Canberra", continent:"Oceania", population:25687, currency:"Australian Dollar", languages:["English"], funFact:"Australia is home to 21 of the world's 25 most venomous snakes." },
+      { id:"AT", name:"Austria", capital:"Vienna", continent:"Europe", population:9042, currency:"Euro", languages:["German"], funFact:"Austria gave the world Red Bull, the Lipizzaner stallions, and the croissant." },
+      { id:"BE", name:"Belgium", capital:"Brussels", continent:"Europe", population:11590, currency:"Euro", languages:["Dutch","French","German"], funFact:"Belgium invented French fries and produces over 220,000 tonnes of chocolate a year." },
+      { id:"BR", name:"Brazil", capital:"Brasília", continent:"Americas", population:213993, currency:"Brazilian Real", languages:["Portuguese"], funFact:"Brazil is the only country in South America where Portuguese is the official language." },
+      { id:"CA", name:"Canada", capital:"Ottawa", continent:"Americas", population:38005, currency:"Canadian Dollar", languages:["English","French"], funFact:"Canada has the longest coastline of any country, stretching 202,080 km." },
+      { id:"CN", name:"China", capital:"Beijing", continent:"Asia", population:1439324, currency:"Chinese Yuan", languages:["Mandarin"], funFact:"China is home to the world's oldest continuous civilization, dating back over 4,000 years." },
+      { id:"CO", name:"Colombia", capital:"Bogotá", continent:"Americas", population:51269, currency:"Colombian Peso", languages:["Spanish"], funFact:"Colombia is the only country in South America with coastlines on both the Pacific Ocean and Caribbean Sea." },
+      { id:"HR", name:"Croatia", capital:"Zagreb", continent:"Europe", population:4047, currency:"Euro", languages:["Croatian"], funFact:"The necktie (cravat) originated in Croatia." },
+      { id:"CU", name:"Cuba", capital:"Havana", continent:"Americas", population:11326, currency:"Cuban Peso", languages:["Spanish"], funFact:"Cuba has the world's highest doctor-to-patient ratio." },
+      { id:"CZ", name:"Czech Republic", capital:"Prague", continent:"Europe", population:10709, currency:"Czech Koruna", languages:["Czech"], funFact:"Czechia has the highest beer consumption per capita in the world." },
+      { id:"DK", name:"Denmark", capital:"Copenhagen", continent:"Europe", population:5831, currency:"Danish Krone", languages:["Danish"], funFact:"Denmark is consistently ranked among the happiest countries in the world." },
+      { id:"EG", name:"Egypt", capital:"Cairo", continent:"Africa", population:104258, currency:"Egyptian Pound", languages:["Arabic"], funFact:"Ancient Egypt is one of the world's oldest civilizations, dating back to 3100 BC." },
+      { id:"ET", name:"Ethiopia", capital:"Addis Ababa", continent:"Africa", population:117876, currency:"Ethiopian Birr", languages:["Amharic"], funFact:"Ethiopia is the only African country to have successfully resisted European colonization." },
+      { id:"FI", name:"Finland", capital:"Helsinki", continent:"Europe", population:5541, currency:"Euro", languages:["Finnish","Swedish"], funFact:"Finland has more saunas per capita than any other country." },
+      { id:"FR", name:"France", capital:"Paris", continent:"Europe", population:65274, currency:"Euro", languages:["French"], funFact:"France is the most visited country in the world, welcoming about 90 million tourists a year." },
+      { id:"DE", name:"Germany", capital:"Berlin", continent:"Europe", population:83784, currency:"Euro", languages:["German"], funFact:"Germany is home to over 1,500 different types of beer and about 1,300 breweries." },
+      { id:"GH", name:"Ghana", capital:"Accra", continent:"Africa", population:32395, currency:"Ghanaian Cedi", languages:["English"], funFact:"Ghana was the first sub-Saharan African country to gain independence from colonial rule in 1957." },
+      { id:"GR", name:"Greece", capital:"Athens", continent:"Europe", population:10423, currency:"Euro", languages:["Greek"], funFact:"Greece has more archaeological museums than any other country in the world." },
+      { id:"IN", name:"India", capital:"New Delhi", continent:"Asia", population:1380004, currency:"Indian Rupee", languages:["Hindi","English"], funFact:"India is the world's largest democracy and has over 2,000 distinct ethnic groups." },
+      { id:"ID", name:"Indonesia", capital:"Jakarta", continent:"Asia", population:273524, currency:"Indonesian Rupiah", languages:["Indonesian"], funFact:"Indonesia is the world's largest archipelago country with over 17,000 islands." },
+      { id:"IR", name:"Iran", capital:"Tehran", continent:"Asia", population:83993, currency:"Iranian Rial", languages:["Persian"], funFact:"Iran (Persia) is home to one of the world's oldest civilizations, over 7,000 years old." },
+      { id:"IQ", name:"Iraq", capital:"Baghdad", continent:"Asia", population:40222, currency:"Iraqi Dinar", languages:["Arabic","Kurdish"], funFact:"Mesopotamia, located in modern Iraq, is known as the 'Cradle of Civilization'." },
+      { id:"IE", name:"Ireland", capital:"Dublin", continent:"Europe", population:4994, currency:"Euro", languages:["Irish","English"], funFact:"Ireland is the only country where the national symbol is a musical instrument — the harp." },
+      { id:"IL", name:"Israel", capital:"Jerusalem", continent:"Asia", population:8656, currency:"Israeli Shekel", languages:["Hebrew","Arabic"], funFact:"Israel has more museums per capita than any other country." },
+      { id:"IT", name:"Italy", capital:"Rome", continent:"Europe", population:60462, currency:"Euro", languages:["Italian"], funFact:"Italy is home to the greatest number of UNESCO World Heritage Sites in the world." },
+      { id:"JP", name:"Japan", capital:"Tokyo", continent:"Asia", population:126476, currency:"Japanese Yen", languages:["Japanese"], funFact:"Japan has the world's oldest continuous hereditary monarchy, established in 660 BC." },
+      { id:"JO", name:"Jordan", capital:"Amman", continent:"Asia", population:10203, currency:"Jordanian Dinar", languages:["Arabic"], funFact:"Jordan is home to Petra, one of the New Seven Wonders of the World." },
+      { id:"KE", name:"Kenya", capital:"Nairobi", continent:"Africa", population:53771, currency:"Kenyan Shilling", languages:["Swahili","English"], funFact:"Kenya is often called the 'Cradle of Humanity' — fossils of early humans have been found there." },
+      { id:"MX", name:"Mexico", capital:"Mexico City", continent:"Americas", population:128933, currency:"Mexican Peso", languages:["Spanish"], funFact:"Mexico City is built on the ruins of Tenochtitlan, the ancient Aztec capital." },
+      { id:"MA", name:"Morocco", capital:"Rabat", continent:"Africa", population:36911, currency:"Moroccan Dirham", languages:["Arabic","Berber"], funFact:"The University of Al Quaraouiyine in Fez, founded 859 AD, is the world's oldest university." },
+      { id:"MZ", name:"Mozambique", capital:"Maputo", continent:"Africa", population:32163, currency:"Mozambican Metical", languages:["Portuguese"], funFact:"Mozambique's flag is the only national flag to feature a modern rifle." },
+      { id:"NP", name:"Nepal", capital:"Kathmandu", continent:"Asia", population:29137, currency:"Nepalese Rupee", languages:["Nepali"], funFact:"Nepal is home to 8 of the world's 10 highest mountains, including Mount Everest." },
+      { id:"NL", name:"Netherlands", capital:"Amsterdam", continent:"Europe", population:17135, currency:"Euro", languages:["Dutch"], funFact:"The Netherlands is the world's second-largest exporter of food and agricultural products." },
+      { id:"NZ", name:"New Zealand", capital:"Wellington", continent:"Oceania", population:5084, currency:"New Zealand Dollar", languages:["English","Māori"], funFact:"New Zealand was the first country in the world to give women the right to vote in 1893." },
+      { id:"NG", name:"Nigeria", capital:"Abuja", continent:"Africa", population:206139, currency:"Nigerian Naira", languages:["English"], funFact:"Nigeria is Africa's most populous country and has the continent's largest economy." },
+      { id:"NO", name:"Norway", capital:"Oslo", continent:"Europe", population:5421, currency:"Norwegian Krone", languages:["Norwegian"], funFact:"Norway introduced salmon sushi to Japan and has the world's longest road tunnel." },
+      { id:"PK", name:"Pakistan", capital:"Islamabad", continent:"Asia", population:220892, currency:"Pakistani Rupee", languages:["Urdu","English"], funFact:"Pakistan is home to K2, the world's second-highest mountain." },
+      { id:"PE", name:"Peru", capital:"Lima", continent:"Americas", population:32972, currency:"Peruvian Sol", languages:["Spanish","Quechua"], funFact:"Peru is home to Machu Picchu, the 15th-century Inca citadel set high in the Andes." },
+      { id:"PH", name:"Philippines", capital:"Manila", continent:"Asia", population:109581, currency:"Philippine Peso", languages:["Filipino","English"], funFact:"The Philippines is an archipelago of over 7,600 islands." },
+      { id:"PL", name:"Poland", capital:"Warsaw", continent:"Europe", population:37847, currency:"Polish Zloty", languages:["Polish"], funFact:"Poland is the birthplace of Marie Curie, the first woman to win a Nobel Prize." },
+      { id:"PT", name:"Portugal", capital:"Lisbon", continent:"Europe", population:10197, currency:"Euro", languages:["Portuguese"], funFact:"Portugal is the oldest country in Europe with unchanged borders, recognized since 1139." },
+      { id:"RO", name:"Romania", capital:"Bucharest", continent:"Europe", population:19238, currency:"Romanian Leu", languages:["Romanian"], funFact:"Romania is home to Transylvania, the legendary home of Dracula." },
+      { id:"RU", name:"Russia", capital:"Moscow", continent:"Europe", population:145934, currency:"Russian Ruble", languages:["Russian"], funFact:"Russia is the largest country in the world, covering 11 time zones." },
+      { id:"SA", name:"Saudi Arabia", capital:"Riyadh", continent:"Asia", population:34814, currency:"Saudi Riyal", languages:["Arabic"], funFact:"Saudi Arabia is home to the world's largest oil reserves and the holy cities of Mecca and Medina." },
+      { id:"ZA", name:"South Africa", capital:"Pretoria", continent:"Africa", population:59309, currency:"South African Rand", languages:["Zulu","Xhosa","Afrikaans","English"], funFact:"South Africa has three capitals: Pretoria, Cape Town, and Bloemfontein." },
+      { id:"KR", name:"South Korea", capital:"Seoul", continent:"Asia", population:51269, currency:"South Korean Won", languages:["Korean"], funFact:"South Korea has the world's fastest average internet connection speeds." },
+      { id:"ES", name:"Spain", capital:"Madrid", continent:"Europe", population:46755, currency:"Euro", languages:["Spanish"], funFact:"Spain is home to La Tomatina, an annual tomato-throwing festival." },
+      { id:"SE", name:"Sweden", capital:"Stockholm", continent:"Europe", population:10099, currency:"Swedish Krona", languages:["Swedish"], funFact:"Sweden pioneered many of the world's flat-pack furniture designs." },
+      { id:"CH", name:"Switzerland", capital:"Bern", continent:"Europe", population:8655, currency:"Swiss Franc", languages:["German","French","Italian"], funFact:"Switzerland has not been at war since 1815 and is home to the International Red Cross." },
+      { id:"TH", name:"Thailand", capital:"Bangkok", continent:"Asia", population:69800, currency:"Thai Baht", languages:["Thai"], funFact:"Thailand is the only Southeast Asian country never colonized by a European power." },
+      { id:"TR", name:"Turkey", capital:"Ankara", continent:"Asia", population:84339, currency:"Turkish Lira", languages:["Turkish"], funFact:"Turkey is home to Göbekli Tepe, the first human settlement discovered (~10,000 BC)." },
+      { id:"UA", name:"Ukraine", capital:"Kyiv", continent:"Europe", population:43734, currency:"Ukrainian Hryvnia", languages:["Ukrainian"], funFact:"Ukraine is Europe's largest country by area and is often called the 'breadbasket of Europe'." },
+      { id:"AE", name:"United Arab Emirates", capital:"Abu Dhabi", continent:"Asia", population:9890, currency:"UAE Dirham", languages:["Arabic"], funFact:"The UAE has the world's tallest building (Burj Khalifa) and largest man-made island (Palm Jumeirah)." },
+      { id:"GB", name:"United Kingdom", capital:"London", continent:"Europe", population:67886, currency:"British Pound Sterling", languages:["English"], funFact:"The UK invented the World Wide Web, the telephone, the steam engine, and the jet engine." },
+      { id:"US", name:"United States", capital:"Washington D.C.", continent:"Americas", population:331003, currency:"US Dollar", languages:["English"], funFact:"The US has the world's largest economy and is home to 50 states spanning 4 time zones." },
+      { id:"UZ", name:"Uzbekistan", capital:"Tashkent", continent:"Asia", population:34915, currency:"Uzbekistani Som", languages:["Uzbek"], funFact:"Uzbekistan is home to Samarkand, one of the oldest inhabited cities in Central Asia." },
+      { id:"VN", name:"Vietnam", capital:"Hanoi", continent:"Asia", population:97339, currency:"Vietnamese Dong", languages:["Vietnamese"], funFact:"Vietnam is the world's second-largest exporter of coffee and rice." },
+      { id:"YE", name:"Yemen", capital:"Sana'a", continent:"Asia", population:29826, currency:"Yemeni Rial", languages:["Arabic"], funFact:"Yemen is home to Socotra, an archipelago called the 'Galápagos of the Indian Ocean'." },
+      { id:"ZM", name:"Zambia", capital:"Lusaka", continent:"Africa", population:18384, currency:"Zambian Kwacha", languages:["English"], funFact:"Zambia is home to Victoria Falls, one of the world's largest waterfalls." },
+      { id:"ZW", name:"Zimbabwe", capital:"Harare", continent:"Africa", population:14863, currency:"Zimbabwean Dollar", languages:["Shona","Ndebele","English"], funFact:"Zimbabwe is home to Great Zimbabwe, the largest ancient stone structure in sub-Saharan Africa." },
+    ];
+
+    const FLAG_URL = (code) => `https://flagcdn.com/w160/${code.toLowerCase()}.png`;
+
+    const QUIZ_MODES = [
+      { id:"flags",    icon:"🏳️", name:"Flag Quiz",        desc:"Show a flag, guess the country",      color:"#F5C842" },
+      { id:"capitals", icon:"🏛️", name:"Capital City",     desc:"Match countries to capitals",         color:"#4F8EF7" },
+      { id:"mapquest", icon:"🗺️", name:"Map Quest",        desc:"Find the highlighted country on map", color:"#22C55E", isNew:true },
+      { id:"currency", icon:"💰", name:"Currency Match",   desc:"Which currency belongs where?",       color:"#A855F7" },
+      { id:"continent",icon:"🌍", name:"Continent Finder", desc:"Which continent is this country in?", color:"#F97316" },
+      { id:"language", icon:"🗣️", name:"Language Link",    desc:"Which country speaks this language?", color:"#EC4899" },
+    ];
+
+    const RANKS = [
+      { min:0,     name:"Map Novice",     level:1 },
+      { min:500,   name:"Globe Trotter",  level:2 },
+      { min:1500,  name:"World Explorer", level:3 },
+      { min:3000,  name:"Atlas Scholar",  level:4 },
+      { min:6000,  name:"Geography Guru", level:5 },
+      { min:10000, name:"GeoMaster Elite",level:6 },
+    ];
+
+    // ─── MAP QUEST DIFFICULTY CONFIGS ─────────────────────────────────────────────
+    const MAP_DIFFICULTIES = [
+      { id:"easy", label:"Easy", emoji:"🌟", desc:"20 well-known countries", hint:"G20 nations — shapes everyone recognises", color:"#22C55E", xpMult:1, time:20, ids:["US","CA","BR","AU","RU","CN","IN","AR","MX","ZA","DE","FR","GB","IT","ES","JP","NG","EG","TR","SA"], },
+      { id:"medium", label:"Medium", emoji:"🔥", desc:"40 major countries", hint:"All large nations across every continent", color:"#F5C842", xpMult:1.5, time:15, ids:["US","CA","BR","AU","RU","CN","IN","AR","MX","ZA","DE","FR","GB","IT","ES","JP","NG","EG","TR","SA","ID","PK","UA","PL","NO","SE","FI","NL","BE","PT","GR","RO","IR","IQ","PE","CO","MA","ET","KE","TH","VN"], },
+      { id:"hard", label:"Hard", emoji:"💀", desc:"All 60 countries", hint:"Every country in the dataset — no mercy", color:"#EF4444", xpMult:2, time:12, ids: COUNTRIES.map(c => c.id), },
+    ];
+
+    // ─── HELPERS ──────────────────────────────────────────────────────────────────
+    function getRank(xp){ let r=RANKS[0]; for(const x of RANKS){if(xp>=x.min)r=x;} return r; }
+    function getNextRank(xp){ for(const r of RANKS){if(xp<r.min)return r;} return null; }
+    function shuffle(arr){ const a=[...arr]; for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];} return a; }
+
+    function generateQuestion(mode, pool, usedIds=new Set()){
+      const available=pool.filter(c=>!usedIds.has(c.id));
+      if(available.length<4) return null;
+      const correct=available[Math.floor(Math.random()*available.length)];
+      const wrong=shuffle(pool.filter(c=>c.id!==correct.id)).slice(0,3);
+      const options=shuffle([correct,...wrong]);
+      switch(mode){
+        case "flags": return{question:"Which country does this flag belong to?",image:FLAG_URL(correct.id),options:options.map(c=>c.name),correct:correct.name,country:correct};
+        case "capitals": return{question:`What is the capital of ${correct.name}?`,options:options.map(c=>c.capital),correct:correct.capital,country:correct};
+        case "currency": return{question:`What currency does ${correct.name} use?`,options:options.map(c=>c.currency),correct:correct.currency,country:correct};
+        case "continent": return{question:`Which continent is ${correct.name} in?`,options:[...new Set(options.map(c=>c.continent))].slice(0,4),correct:correct.continent,country:correct};
+        case "language": return{question:`Which country primarily speaks ${correct.languages[0]}?`,options:options.map(c=>c.name),correct:correct.name,country:correct};
+        default: return null;
+      }
+    }
+
+    // ─── GLOBAL CSS ───────────────────────────────────────────────────────────────
+    const css = `
+    @import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=DM+Sans:wght@400;500;600&display=swap');
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{background:#050810;font-family:'DM Sans',sans-serif;color:#F1F5F9;overflow-x:hidden;min-height:100vh;}
+    .sora{font-family:'Sora',sans-serif;}
+    ::-webkit-scrollbar{width:6px;}::-webkit-scrollbar-track{background:#050810;}::-webkit-scrollbar-thumb{background:#F5C842;border-radius:3px;}
+    
+    /* Layout Containers */
+    .app-wrapper { position: relative; z-index: 1; min-height: 100vh; display: flex; flex-direction: column; transition: all 0.3s ease; }
+    .app-container { padding: 32px 20px 100px; width: 100%; max-width: 600px; margin: 0 auto; transition: all 0.3s ease; flex: 1; }
+    
+    /* Ambient Background Blobs */
+    .ambient-blob { position: fixed; border-radius: 50%; filter: blur(120px); opacity: 0.15; z-index: 0; pointer-events: none; }
+    .blob-1 { top: -10%; left: -10%; width: 50vw; height: 50vw; background: #F5C842; animation: float 14s ease-in-out infinite; }
+    .blob-2 { bottom: -10%; right: -10%; width: 60vw; height: 60vw; background: #4F8EF7; animation: float 18s ease-in-out infinite reverse; }
+    
+    .glass { background: rgba(255,255,255,0.03); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.08); box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 8px 32px rgba(0,0,0,0.2); border-radius: 20px; }
+    .glass-bright { background: rgba(255,255,255,0.05); backdrop-filter: blur(24px); border: 1px solid rgba(245,200,66,0.25); box-shadow: inset 0 1px 0 rgba(255,255,255,0.1), 0 8px 32px rgba(0,0,0,0.3); border-radius: 20px; }
+    .gold-gradient { background: linear-gradient(135deg, #FCD34D, #B45309); }
+    .gold-text { background: linear-gradient(135deg, #FCD34D, #F59E0B); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+    .glow-gold { box-shadow: 0 0 25px rgba(245,200,66,0.25), 0 0 50px rgba(245,200,66,0.1); }
+    
+    .btn-gold { background: linear-gradient(135deg, #FCD34D, #D97706); border: none; cursor: pointer; font-family: 'Sora', sans-serif; font-weight: 700; color: #050810; transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1); }
+    .btn-gold:hover { transform: translateY(-3px) scale(1.02); box-shadow: 0 12px 30px rgba(245,200,66,0.4); }
+    .btn-gold:active { transform: translateY(0) scale(0.98); }
+    .btn-gold:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; filter: grayscale(50%); }
+    
+    .btn-ghost { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); cursor: pointer; color: #F1F5F9; font-family: 'DM Sans', sans-serif; transition: all 0.2s ease; }
+    .btn-ghost:hover { background: rgba(255,255,255,0.08); border-color: rgba(245,200,66,0.4); transform: translateY(-2px); }
+    
+    .option-card { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; cursor: pointer; transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1); padding: 16px 20px; text-align: left; font-family: 'DM Sans', sans-serif; font-size: 15px; font-weight: 500; color: #F1F5F9; display: flex; align-items: center; gap: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+    .option-card:hover:not(.disabled) { background: rgba(245,200,66,0.06); border-color: rgba(245,200,66,0.4); transform: translateY(-4px) scale(1.02); box-shadow: 0 8px 25px rgba(0,0,0,0.2); }
+    .option-card.correct { background: rgba(34,197,94,0.15)!important; border-color: #22C55E!important; animation: pulseGreen 0.4s ease; }
+    .option-card.wrong { background: rgba(239,68,68,0.12)!important; border-color: #EF4444!important; animation: shakeCard 0.4s ease; }
+    .option-card.reveal-correct { background: rgba(34,197,94,0.1)!important; border-color: rgba(34,197,94,0.5)!important; }
+    
+    @keyframes pulseGreen{0%{transform:scale(1);}50%{transform:scale(1.03);box-shadow:0 0 25px rgba(34,197,94,0.5);}100%{transform:scale(1);}}
+    @keyframes shakeCard{0%,100%{transform:translateX(0);}20%{transform:translateX(-8px);}40%{transform:translateX(8px);}60%{transform:translateX(-5px);}80%{transform:translateX(5px);}}
+    @keyframes fadeInUp{from{opacity:0;transform:translateY(20px);}to{opacity:1;transform:translateY(0);}}
+    @keyframes scaleIn{from{opacity:0;transform:scale(0.9);}to{opacity:1;transform:scale(1);}}
+    @keyframes slideUp{from{transform:translateY(100%);opacity:0;}to{transform:translateY(0);opacity:1;}}
+    @keyframes pulse{0%,100%{opacity:1;transform:scale(1);}50%{opacity:0.8;transform:scale(1.04);}}
+    @keyframes rotate{from{transform:rotate(0deg);}to{transform:rotate(360deg);}}
+    @keyframes float{0%,100%{transform:translateY(0);}50%{transform:translateY(-15px);}}
+    @keyframes xpFloat{0%{opacity:1;transform:translateY(0) scale(1);}100%{opacity:0;transform:translateY(-50px) scale(1.3);}}
+    @keyframes confettiFall{0%{transform:translateY(-20px) rotate(0deg);opacity:1;}100%{transform:translateY(100vh) rotate(720deg);opacity:0;}}
+    @keyframes mapPulse{0%,100%{filter:drop-shadow(0 0 8px rgba(245,200,66,0.8));transform:scale(1);}50%{filter:drop-shadow(0 0 24px rgba(245,200,66,1)) brightness(1.2);transform:scale(1.05);}}
+    
+    .animate-fadeInUp { animation: fadeInUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) both; }
+    .animate-scaleIn { animation: scaleIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) both; }
+    .animate-slideUp { animation: slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) both; }
+    .animate-float { animation: float 4s ease-in-out infinite; }
+    .animate-pulse-slow { animation: pulse 2.5s ease-in-out infinite; }
+    
+    .dotgrid-bg { background-image: radial-gradient(circle, rgba(79,142,247,0.12) 1px, transparent 1px); background-size: 32px 32px; }
+    
+    .stat-card { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 16px; padding: 20px; text-align: center; transition: all 0.3s ease; }
+    .stat-card:hover { transform: translateY(-4px); background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.15); }
+    
+    .mode-card { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 20px; padding: 24px; cursor: pointer; transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); position: relative; overflow: hidden; }
+    .mode-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: radial-gradient(circle at top right, rgba(255,255,255,0.05), transparent); opacity: 0; transition: opacity 0.3s ease; }
+    .mode-card:hover { transform: translateY(-6px) scale(1.02); border-color: rgba(245,200,66,0.4); box-shadow: 0 15px 40px rgba(0,0,0,0.4); }
+    .mode-card:hover::before { opacity: 1; }
+    
+    .xp-float { position: fixed; font-family: 'Sora', sans-serif; font-weight: 800; font-size: 24px; color: #FCD34D; pointer-events: none; animation: xpFloat 1.2s ease forwards; z-index: 9999; text-shadow: 0 0 20px rgba(245,200,66,0.8); }
+    .confetti-piece { position: fixed; pointer-events: none; animation: confettiFall linear forwards; z-index: 9998; }
+    .leaderboard-row { display: flex; align-items: center; padding: 14px 20px; border-radius: 16px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); margin-bottom: 10px; transition: all 0.2s ease; }
+    .leaderboard-row:hover { background: rgba(255,255,255,0.04); transform: translateX(4px); }
+    .leaderboard-row.me { background: rgba(245,200,66,0.08); border-color: rgba(245,200,66,0.3); }
+    .progress-ring-circle { transition: stroke-dashoffset 1.5s cubic-bezier(0.16, 1, 0.3, 1); }
+    
+    input[type=text] { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); border-radius: 14px; color: #F1F5F9; font-family: 'DM Sans', sans-serif; font-size: 16px; outline: none; transition: all 0.3s ease; box-shadow: inset 0 2px 4px rgba(0,0,0,0.2); }
+    input[type=text]:focus { border-color: rgba(245,200,66,0.5); background: rgba(255,255,255,0.07); box-shadow: inset 0 2px 4px rgba(0,0,0,0.2), 0 0 0 4px rgba(245,200,66,0.15); }
+    
+    .nav-tab { padding: 10px 20px; border-radius: 10px; cursor: pointer; font-weight: 600; font-size: 14px; transition: all 0.2s; font-family: 'Sora', sans-serif; background: transparent; border: none; color: #64748B; }
+    .nav-tab.active { background: rgba(245,200,66,0.15); color: #FCD34D; }
+    .nav-tab:hover:not(.active) { color: #94A3B8; background: rgba(255,255,255,0.05); }
+    
+    /* Responsive Grids & Layouts */
+    .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+    .grid-responsive { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+    
+    .bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; background: rgba(5,8,16,0.85); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); border-top: 1px solid rgba(255,255,255,0.08); display: flex; justify-content: space-around; padding: 16px 0 24px; z-index: 100; box-shadow: 0 -10px 40px rgba(0,0,0,0.5); }
+    .bnav-item { display: flex; flex-direction: column; align-items: center; gap: 6px; cursor: pointer; transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); padding: 8px 20px; border-radius: 14px; }
+    .bnav-item:hover { background: rgba(255,255,255,0.05); transform: translateY(-2px); }
+    .bnav-item.active { background: rgba(245,200,66,0.1); }
+    .bnav-item.active .bnav-icon, .bnav-item.active .bnav-label { color: #FCD34D; }
+    .bnav-icon { font-size: 24px; color: #475569; transition: color 0.3s; }
+    .bnav-label { font-size: 11px; font-weight: 700; color: #475569; font-family: 'Sora', sans-serif; transition: color 0.3s; }
+    
+    .map-land { transition: fill 0.3s ease; }
+    .map-land.highlighted { animation: mapPulse 1.5s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+    .map-land.correct-reveal { fill: #22C55E !important; filter: drop-shadow(0 0 16px rgba(34,197,94,0.9)); animation: none !important; }
+    .map-land.wrong-reveal { fill: #EF4444 !important; filter: drop-shadow(0 0 16px rgba(239,68,68,0.9)); animation: none !important; }
+    
+    .diff-card { background: rgba(255,255,255,0.03); border: 2px solid rgba(255,255,255,0.08); border-radius: 20px; padding: 20px 24px; cursor: pointer; transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); }
+    .diff-card:hover { transform: translateY(-4px) scale(1.02); box-shadow: 0 15px 40px rgba(0,0,0,0.3); background: rgba(255,255,255,0.05); }
+    .diff-card.selected { border-width: 2px; }
+    
+    .new-badge { background: linear-gradient(135deg, #22C55E, #15803D); color: white; font-size: 10px; font-weight: 800; padding: 3px 8px; border-radius: 20px; font-family: 'Sora', sans-serif; letter-spacing: 0.5px; vertical-align: middle; margin-left: 8px; box-shadow: 0 2px 10px rgba(34,197,94,0.4); }
+
+    /* ─── DESKTOP ADAPTATIONS ───────────────────────────────────────── */
+    @media (min-width: 768px) {
+      .has-nav .app-container { padding-left: 140px; padding-bottom: 60px; max-width: 1000px; }
+      .app-container { max-width: 900px; padding: 60px 40px; }
+      
+      /* Sidebar Navigation */
+      .bottom-nav { top: 0; left: 0; bottom: 0; right: auto; width: 100px; flex-direction: column; justify-content: center; border-top: none; border-right: 1px solid rgba(255,255,255,0.08); padding: 40px 0; gap: 24px; background: rgba(5,8,16,0.6); box-shadow: 20px 0 50px rgba(0,0,0,0.3); }
+      .bnav-item { padding: 16px 0; border-radius: 16px; margin: 0 12px; }
+      
+      /* Desktop Grids */
+      .grid-responsive { grid-template-columns: repeat(4, 1fr); gap: 20px; }
+      .desktop-grid-3 { grid-template-columns: repeat(3, 1fr); }
+      .desktop-grid-4 { grid-template-columns: repeat(4, 1fr); }
+      
+      /* Quiz Layouts */
+      .quiz-container { max-width: 800px; margin: 0 auto; }
+      .options-grid { grid-template-columns: repeat(2, 1fr); gap: 16px; }
+      .option-card { padding: 20px 24px; font-size: 16px; }
+      .map-wrapper { height: 400px; }
+      
+      h1.sora { font-size: 40px !important; }
+      .stat-card { padding: 28px; }
+    }
+    `;
+
+    // ─── UI ATOMS ─────────────────────────────────────────────────────────────────
+    function XPFloat({x,y,amount,onDone}){
+      useEffect(()=>{const t=setTimeout(onDone,1200);return()=>clearTimeout(t);},[]);
+      return <div className="xp-float" style={{left:x,top:y}}>+{amount} XP</div>;
+    }
+
+    function Confetti(){
+      const pieces=Array.from({length:80},(_,i)=>({id:i,x:Math.random()*100,color:["#F5C842","#4F8EF7","#22C55E","#EC4899","#F97316"][i%5],delay:Math.random()*2,dur:2.5+Math.random()*3,size:8+Math.random()*10}));
+      return<>{pieces.map(p=><div key={p.id} className="confetti-piece" style={{left:`${p.x}%`,top:"-20px",backgroundColor:p.color,width:p.size,height:p.size,animationDuration:`${p.dur}s`,animationDelay:`${p.delay}s`,borderRadius:p.id%3===0?"50%":"3px"}}/>)}</>;
+    }
+
+    function ProgressRing({percent,size=160,stroke=12,children}){
+      const r=(size-stroke)/2,circ=2*Math.PI*r,offset=circ-(percent/100)*circ;
+      return(
+        <div style={{position:"relative",width:size,height:size,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto"}}>
+          <svg width={size} height={size} style={{position:"absolute",top:0,left:0,transform:"rotate(-90deg)", filter:"drop-shadow(0 0 10px rgba(245,200,66,0.3))"}}>
+            <circle cx={size/2} cy={size/2} r={r} fill="rgba(255,255,255,0.02)" stroke="rgba(255,255,255,0.06)" strokeWidth={stroke}/>
+            <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="url(#gg)" strokeWidth={stroke} strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={offset} className="progress-ring-circle"/>
+            <defs><linearGradient id="gg" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stopColor="#FCD34D"/><stop offset="100%" stopColor="#D97706"/></linearGradient></defs>
+          </svg>
+          <div style={{position:"relative",zIndex:1}}>{children}</div>
+        </div>
+      );
+    }
+
+    // ─── WORLD MAP SVG RENDERER ───────────────────────────────────────────────────
+    function WorldMap({features,pathGen,highlightNumId,answeredState}){
+      const paths=useMemo(()=>features.map((f, index)=>{
+        try{ return{key: f.id ? String(f.id) : `fallback-${index}`, id:Number(f.id), d:pathGen(f)||"", feature: f}; }catch{ return null; }
+      }).filter(Boolean),[features,pathGen]);
+
+      const highlightedFeature = useMemo(() => {
+        const p = paths.find(p => p.id === highlightNumId);
+        return p ? p.feature : null;
+      }, [paths, highlightNumId]);
+
+      const mapTransform = useMemo(() => {
+        if (!highlightedFeature || answeredState) return "translate(0px, 0px) scale(1)";
+        try {
+          const bounds = pathGen.bounds(highlightedFeature);
+          if (!bounds || isNaN(bounds[0][0])) return "translate(0px, 0px) scale(1)";
+          const [[x0, y0], [x1, y1]] = bounds;
+          const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, w = x1 - x0, h = y1 - y0;
+          const scale = Math.max(1.3, Math.min(2.8, 0.4 / Math.max(w / 960, h / 500)));
+          const tx = 480 - cx * scale, ty = 250 - cy * scale;
+          return `translate(${tx}px, ${ty}px) scale(${scale})`;
+        } catch (e) { return "translate(0px, 0px) scale(1)"; }
+      }, [highlightedFeature, pathGen, answeredState]);
+
+      return(
+        <svg viewBox="0 0 960 500" width="100%" height="100%" style={{display:"block",borderRadius:18}}>
+          <rect width="960" height="500" fill="#0A1220"/>
+          <g style={{ transform: mapTransform, transition: "transform 1.4s cubic-bezier(0.34, 1.56, 0.64, 1)", transformOrigin: "0px 0px" }}>
+            {Array.from({length:10},(_,i)=>(
+              <line key={i} x1="0" y1={i*55+10} x2="960" y2={i*55+10} stroke="rgba(79,142,247,0.06)" strokeWidth="1.5" vectorEffect="non-scaling-stroke"/>
+            ))}
+            {paths.map(p=>{
+              const isHL=p.id===highlightNumId, isCorrect=answeredState==="correct"&&isHL, isWrong=answeredState==="wrong"&&isHL;
+              let fill=isHL?"#FCD34D":"#142033";
+              if(isCorrect) fill="#22C55E";
+              if(isWrong) fill="#EF4444";
+              const stroke=isHL?"#FEF08A":"#1E2E45";
+              return(
+                <path key={p.key} d={p.d} fill={fill} stroke={stroke} strokeWidth={isHL?1.5:0.6} vectorEffect="non-scaling-stroke"
+                  className={`map-land${isHL&&!answeredState?" highlighted":""}${isCorrect?" correct-reveal":""}${isWrong?" wrong-reveal":""}`}
+                />
+              );
+            })}
+          </g>
+        </svg>
+      );
+    }
+
+    // ─── MAP QUEST DIFFICULTY SCREEN ──────────────────────────────────────────────
+    function MapQuizDifficultyScreen({onBack,onStart}){
+      const [selected,setSelected]=useState(null);
+      return(
+        <div className="app-container" style={{maxWidth:600}}>
+          <div className="animate-fadeInUp" style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}>
+            <button className="btn-ghost" onClick={onBack} style={{padding:"10px 16px",borderRadius:12,fontSize:14}}>← Back</button>
+          </div>
+          <div className="animate-fadeInUp" style={{textAlign:"center",padding:"16px 0 32px",animationDelay:"0.05s"}}>
+            <div style={{fontSize:64,marginBottom:16,animation:"float 3s ease-in-out infinite", filter:"drop-shadow(0 10px 20px rgba(0,0,0,0.3))"}}>🗺️</div>
+            <h2 className="sora" style={{fontSize:32,fontWeight:800,marginBottom:10}}>
+              <span className="gold-text">Map</span> Quest
+            </h2>
+            <p style={{color:"#94A3B8",fontSize:15,lineHeight:1.7,maxWidth:380,margin:"0 auto"}}>
+              A country glows gold on the world map.<br/>Identify it from 4 options — fast!
+            </p>
+          </div>
+          <div className="glass animate-fadeInUp" style={{padding:"24px",marginBottom:32,animationDelay:"0.1s"}}>
+            <div className="sora" style={{fontSize:12,color:"#FCD34D",fontWeight:700,marginBottom:16,letterSpacing:"1.5px"}}>HOW IT WORKS</div>
+            <div style={{display:"flex",flexDirection:"column",gap:12}}>
+              {[["🌍","A country glows gold on the world map"],["🎯","Pick the correct name from 4 choices"],["⚡","Faster answers earn speed bonus XP"],["🔥","Build streaks for score multipliers"]].map(([ic,t])=>(
+                <div key={t} style={{display:"flex",alignItems:"center",gap:14,fontSize:14,color:"#CBD5E1",fontWeight:500}}>
+                  <span style={{fontSize:20,width:24,flexShrink:0,textAlign:"center"}}>{ic}</span>{t}
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="sora animate-fadeInUp" style={{fontSize:12,color:"#64748B",fontWeight:700,marginBottom:16,letterSpacing:"1.5px",animationDelay:"0.15s"}}>SELECT DIFFICULTY</div>
+          <div style={{display:"flex",flexDirection:"column",gap:16,marginBottom:32}}>
+            {MAP_DIFFICULTIES.map((d,i)=>(
+              <div key={d.id}
+                className={`diff-card animate-fadeInUp ${selected===d.id?"selected":""}`}
+                style={{animationDelay:`${0.18+i*0.07}s`,borderColor:selected===d.id?d.color:"rgba(255,255,255,0.08)",background:selected===d.id?`${d.color}15`:"rgba(255,255,255,0.03)"}}
+                onClick={()=>setSelected(d.id)}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:16}}>
+                  <div style={{display:"flex",alignItems:"center",gap:16,flex:1}}>
+                    <div style={{width:56,height:56,borderRadius:16,background:`${d.color}1A`,border:`2px solid ${d.color}40`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:26,flexShrink:0}}>{d.emoji}</div>
+                    <div>
+                      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:4}}>
+                        <span className="sora" style={{fontSize:18,fontWeight:800,color:selected===d.id?d.color:"#F1F5F9"}}>{d.label}</span>
+                        <span style={{fontSize:13,color:"#94A3B8"}}>{d.desc}</span>
+                      </div>
+                      <div style={{fontSize:13,color:"#64748B"}}>{d.hint}</div>
+                    </div>
+                  </div>
+                  <div style={{textAlign:"right",flexShrink:0}}>
+                    <div className="sora" style={{fontSize:15,fontWeight:800,color:d.color}}>{d.xpMult}x XP</div>
+                    <div style={{fontSize:12,color:"#475569",marginTop:4}}>{d.time}s/q</div>
+                  </div>
+                </div>
+                {selected===d.id&&(
+                  <div className="animate-slideUp" style={{marginTop:16,paddingTop:12,borderTop:"1px solid rgba(255,255,255,0.06)",display:"flex",alignItems:"center",gap:8}}>
+                    <div style={{width:8,height:8,borderRadius:"50%",background:d.color,boxShadow:`0 0 12px ${d.color}`,animation:"pulse 1s infinite"}}/>
+                    <span style={{fontSize:13,color:d.color,fontFamily:"Sora",fontWeight:600}}>{d.ids.length} countries · {d.time}s per question</span>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+          <button className="btn-gold animate-fadeInUp" style={{width:"100%",padding:"20px",borderRadius:16,fontSize:18,animationDelay:"0.42s"}}
+            disabled={!selected}
+            onClick={()=>{const cfg=MAP_DIFFICULTIES.find(d=>d.id===selected);if(cfg)onStart(cfg);}}>
+            🗺️ Start Map Quest
+          </button>
+        </div>
+      );
+    }
+
+    // ─── MAP QUEST QUIZ SCREEN ────────────────────────────────────────────────────
+    const TOTAL_MAP_QS=10;
+
+    function MapQuizScreen({diffConfig,onComplete,onBack}){
+      const [loadState,setLoadState]=useState("loading");
+      const [worldFeatures,setWorldFeatures]=useState([]);
+      const [pathGen,setPathGen]=useState(null);
+      const [questions,setQuestions]=useState([]);
+      const [qIndex,setQIndex]=useState(0);
+      const [selected,setSelected]=useState(null);
+      const [answeredState,setAnsweredState]=useState(null);
+      const [score,setScore]=useState(0);
+      const [lives,setLives]=useState(3);
+      const [streak,setStreak]=useState(0);
+      const [timeLeft,setTimeLeft]=useState(diffConfig.time);
+      const [answers,setAnswers]=useState([]);
+      const [showFact,setShowFact]=useState(false);
+      const [xpFloats,setXpFloats]=useState([]);
+      const timerRef=useRef(null);
+
+      useEffect(()=>{
+        const doLoad=()=>{
+          fetch("https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json")
+            .then(r=>r.json())
+            .then(topo=>{
+              const feats=window.topojson.feature(topo,topo.objects.countries).features;
+              const proj=d3.geoNaturalEarth1().scale(153).translate([480,250]);
+              const gen=d3.geoPath().projection(proj);
+              setWorldFeatures(feats);
+              setPathGen(()=>gen);
+              setLoadState("ready");
+            })
+            .catch(()=>setLoadState("error"));
+        };
+        if(window.topojson){doLoad();return;}
+      },[]);
+
+      useEffect(()=>{
+        if(loadState!=="ready"||!worldFeatures.length) return;
+        const presentIds=new Set(worldFeatures.map(f=>Number(f.id)));
+        const pool=COUNTRIES.filter(c=>{
+          const num=ALPHA2_TO_NUMERIC[c.id];
+          return num!==undefined&&presentIds.has(num)&&diffConfig.ids.includes(c.id);
+        });
+        if(pool.length<4){setLoadState("error");return;}
+        const qs=[],used=new Set();
+        for(let i=0;i<TOTAL_MAP_QS;i++){
+          const avail=pool.filter(c=>!used.has(c.id));
+          if(avail.length<4) break;
+          const correct=avail[Math.floor(Math.random()*avail.length)];
+          used.add(correct.id);
+          const wrong=shuffle(pool.filter(c=>c.id!==correct.id)).slice(0,3);
+          qs.push({correct,options:shuffle([correct,...wrong])});
+        }
+        setQuestions(qs);
+      },[loadState,worldFeatures]);
+
+      useEffect(()=>{
+        if(loadState!=="ready"||!questions.length||answeredState) return;
+        if(timeLeft<=0){handleAnswer(null,null);return;}
+        timerRef.current=setTimeout(()=>setTimeLeft(t=>t-1),1000);
+        return()=>clearTimeout(timerRef.current);
+      },[timeLeft,answeredState,questions,loadState]);
+
+      const q=questions[qIndex];
+      const highlightNumId=q?ALPHA2_TO_NUMERIC[q.correct.id]:null;
+
+      const handleAnswer=useCallback((country,event)=>{
+        if(answeredState||!q) return;
+        clearTimeout(timerRef.current);
+        const isCorrect=country?.id===q.correct.id;
+        const newStreak=isCorrect?streak+1:0;
+        const timeBonus=timeLeft>diffConfig.time*0.7?50:timeLeft>diffConfig.time*0.4?25:0;
+        const streakMult=newStreak>=10?3:newStreak>=5?2:newStreak>=3?1.5:1;
+        const xpGained=isCorrect?Math.round((100+timeBonus)*diffConfig.xpMult*streakMult):0;
+        setStreak(newStreak);
+        setAnsweredState(isCorrect?"correct":"wrong");
+        setSelected(country);
+        if(isCorrect){
+          setScore(s=>s+xpGained);
+          if(event){const r=event.currentTarget.getBoundingClientRect();setXpFloats(f=>[...f,{id:Date.now(),x:r.left+r.width/2-30,y:r.top-10,amount:xpGained}]);}
+        } else {setLives(l=>l-1);}
+        const newAns=[...answers,{country:q.correct,correct:isCorrect,chosen:country}];
+        setAnswers(newAns);
+        setShowFact(true);
+        const nl=isCorrect?lives:lives-1;
+        setTimeout(()=>{
+          setShowFact(false);
+          if(qIndex+1>=questions.length||nl<=0){
+            onComplete({score:score+xpGained,answers:newAns,streak:Math.max(streak,newStreak)});
+          } else {
+            setQIndex(i=>i+1);setSelected(null);setAnsweredState(null);setTimeLeft(diffConfig.time);
+          }
+        },2500);
+      },[answeredState,q,timeLeft,streak,lives,score,answers,qIndex,questions,diffConfig]);
+
+      const timerPct=(timeLeft/diffConfig.time)*100;
+      const timerDanger=timeLeft<=Math.floor(diffConfig.time*0.33);
+
+      if(loadState==="loading") return(
+        <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"80vh",gap:20}}>
+          <div style={{fontSize:64,animation:"rotate 1.5s cubic-bezier(0.4, 0, 0.2, 1) infinite"}}>🌍</div>
+          <div className="sora" style={{fontSize:18,color:"#94A3B8",fontWeight:600,letterSpacing:"1px"}}>Loading World Map...</div>
+          <div style={{width:160,height:6,background:"rgba(255,255,255,0.06)",borderRadius:3,overflow:"hidden"}}><div className="gold-gradient" style={{height:"100%",width:"65%",borderRadius:3,animation:"pulse 1.5s infinite"}}/></div>
+        </div>
+      );
+      if(loadState==="error") return(
+        <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"80vh",gap:20,padding:32,textAlign:"center"}}>
+          <div style={{fontSize:56}}>😕</div>
+          <div className="sora" style={{fontSize:22,fontWeight:800}}>Map couldn't load</div>
+          <p style={{color:"#94A3B8",fontSize:16,maxWidth:300}}>Check your connection and try again.</p>
+          <button className="btn-gold" style={{padding:"14px 32px",borderRadius:14,fontSize:16,marginTop:10}} onClick={onBack}>Go Back</button>
+        </div>
+      );
+      if(!q) return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"80vh"}}><div style={{fontSize:40,animation:"rotate 1s linear infinite"}}>🌍</div></div>;
+
+      return(
+        <div className="app-container quiz-container">
+          {xpFloats.map(f=><XPFloat key={f.id} x={f.x} y={f.y} amount={f.amount} onDone={()=>setXpFloats(fs=>fs.filter(x=>x.id!==f.id))}/>)}
+          
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
+            <button className="btn-ghost" onClick={onBack} style={{padding:"8px 14px",borderRadius:10,fontSize:14}}>✕ Quit</button>
+            <div className="sora" style={{fontSize:16,fontWeight:800,color:"#94A3B8",letterSpacing:"1px"}}>
+              Q {qIndex+1}<span style={{color:"#FCD34D"}}> / {questions.length}</span>
+            </div>
+            <div style={{display:"flex",gap:6}}>{Array.from({length:3},(_,i)=><span key={i} style={{fontSize:20,opacity:i<lives?1:0.2,transition:"opacity 0.3s"}}>❤️</span>)}</div>
+          </div>
+          
+          <div style={{height:6,background:"rgba(255,255,255,0.06)",borderRadius:3,marginBottom:20,overflow:"hidden",boxShadow:"inset 0 1px 2px rgba(0,0,0,0.3)"}}>
+            <div style={{height:"100%",borderRadius:3,background:timerDanger?"linear-gradient(90deg,#EF4444,#F97316)":"linear-gradient(90deg,#FCD34D,#F97316)",width:`${timerPct}%`,transition:"width 1s linear, background 0.3s",boxShadow:timerDanger?"0 0 12px rgba(239,68,68,0.7)":"0 0 12px rgba(245,200,66,0.5)"}}/>
+          </div>
+          
+          <div style={{display:"flex",justifyContent:"space-between",marginBottom:20,gap:12}}>
+            <div className="glass" style={{padding:"10px 18px",flex:1,textAlign:"center"}}><span className="sora" style={{fontSize:14,fontWeight:800,color:"#FCD34D"}}>⭐ {score.toLocaleString()}</span></div>
+            {streak>=3&&<div className="glass animate-scaleIn" style={{padding:"10px 18px",flex:1,textAlign:"center"}}><span className="sora" style={{fontSize:14,fontWeight:800,color:"#F97316"}}>🔥 ×{streak}</span></div>}
+            <div className="glass" style={{padding:"10px 18px",flex:1,textAlign:"center"}}><span style={{fontSize:14,color:timerDanger?"#EF4444":"#CBD5E1",fontWeight:timerDanger?800:600,transition:"color 0.3s"}}>{timeLeft}s</span></div>
+          </div>
+          
+          <div className="animate-scaleIn glass" key={`label-${qIndex}`} style={{textAlign:"center",marginBottom:20,padding:"16px",border:"1px solid rgba(255,255,255,0.1)"}}>
+            <div className="sora" style={{fontSize:11,color:"#94A3B8",marginBottom:6,letterSpacing:"1.5px"}}>IDENTIFY THIS GLOWING COUNTRY</div>
+            <div style={{fontSize:16,color:"#F1F5F9",fontWeight:500}}>
+              The highlighted country glows <span style={{color:"#FCD34D",fontWeight:800,textShadow:"0 0 10px rgba(253,211,77,0.5)"}}>gold</span>. What is it?
+              {diffConfig.id==="easy"&&q&&<span style={{color:"#64748B",display:"block",marginTop:4,fontSize:14}}>Hint: It's in <span style={{color:"#FCD34D"}}>{q.correct.continent}</span></span>}
+            </div>
+          </div>
+          
+          <div key={`map-${qIndex}`} className="animate-scaleIn map-wrapper" style={{marginBottom:24,borderRadius:20,overflow:"hidden",border:"1px solid rgba(255,255,255,0.1)",boxShadow:"0 12px 50px rgba(0,0,0,0.6)",aspectRatio:"16/9",background:"#0A1220"}}>
+            {pathGen&&<WorldMap features={worldFeatures} pathGen={pathGen} highlightNumId={highlightNumId} answeredState={answeredState}/>}
+          </div>
+          
+          <div className="options-grid" style={{display:"grid",gap:12,marginBottom:16}}>
+            {q.options.map((opt,i)=>{
+              const isChosen=selected?.id===opt.id;
+              const isCorrectOpt=opt.id===q.correct.id;
+              let cls="option-card";
+              if(answeredState){
+                if(isCorrectOpt) cls+=" reveal-correct";
+                if(isChosen&&!isCorrectOpt) cls+=" wrong";
+                if(isChosen&&isCorrectOpt) cls+=" correct";
+                cls+=" disabled";
+              }
+              return(
+                <button key={i} className={cls} onClick={(e)=>handleAnswer(opt,e)} style={{opacity:answeredState&&!isCorrectOpt&&!isChosen?0.35:1}}>
+                  <img src={FLAG_URL(opt.id)} alt="" style={{width:32,height:22,objectFit:"cover",borderRadius:4,border:"1px solid rgba(255,255,255,0.1)",flexShrink:0,boxShadow:"0 2px 5px rgba(0,0,0,0.2)"}}/>
+                  <span style={{flex:1}}>{opt.name}</span>
+                  <span style={{fontSize:18,flexShrink:0}}>{answeredState&&isCorrectOpt?"✅":""}{answeredState&&isChosen&&!isCorrectOpt?"❌":""}</span>
+                </button>
+              );
+            })}
+          </div>
+          
+          {showFact&&(
+            <div className="glass-bright animate-slideUp" style={{padding:"20px",borderLeft:"4px solid #FCD34D",marginTop:24}}>
+              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
+                <img src={FLAG_URL(q.correct.id)} alt="" style={{width:24,height:16,objectFit:"cover",borderRadius:2}}/>
+                <span className="sora" style={{fontSize:13,color:"#FCD34D",fontWeight:800,letterSpacing:"1px"}}>DID YOU KNOW? · {q.correct.name.toUpperCase()}</span>
+              </div>
+              <p style={{fontSize:15,color:"#CBD5E1",lineHeight:1.6}}>{q.correct.funFact}</p>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // ─── HOME SCREEN ──────────────────────────────────────────────────────────────
+    function HomeScreen({user,onNavigate,onPlayNow}){
+      const rank=getRank(user.xp),nextRank=getNextRank(user.xp);
+      const xpProgress=nextRank?((user.xp-rank.min)/(nextRank.min-rank.min))*100:100;
+      return(
+        <div className="app-container">
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:32}} className="animate-fadeInUp">
+            <div>
+              <h1 className="sora" style={{fontSize:32,fontWeight:800,lineHeight:1.1,letterSpacing:"-0.5px"}}><span className="gold-text">Geo</span><span>Master</span></h1>
+              <p style={{fontSize:14,color:"#94A3B8",marginTop:4,fontWeight:500}}>World Knowledge Quiz</p>
+            </div>
+            <div className="glass-bright animate-float" style={{padding:"12px 20px",cursor:"pointer",borderRadius:16}} onClick={()=>onNavigate("profile")}>
+              <div style={{display:"flex",alignItems:"center",gap:12}}>
+                <div style={{width:42,height:42,borderRadius:"50%",background:"linear-gradient(135deg,#FCD34D,#D97706)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,boxShadow:"0 4px 15px rgba(245,200,66,0.3)"}}>🌍</div>
+                <div><div className="sora" style={{fontSize:13,fontWeight:800,color:"#FCD34D"}}>{rank.name}</div><div style={{fontSize:12,color:"#CBD5E1",fontWeight:500}}>{user.xp.toLocaleString()} XP</div></div>
+              </div>
+            </div>
+          </div>
+          
+          <div className="glass animate-fadeInUp" style={{padding:"24px",marginBottom:24,animationDelay:"0.1s"}}>
+            <div style={{display:"flex",justifyContent:"space-between",marginBottom:12}}>
+              <span className="sora" style={{fontSize:14,fontWeight:700,color:"#FCD34D"}}>Level {rank.level} — {rank.name}</span>
+              {nextRank&&<span style={{fontSize:13,color:"#94A3B8",fontWeight:600}}>{user.xp} / {nextRank.min}</span>}
+            </div>
+            <div style={{height:10,background:"rgba(255,255,255,0.06)",borderRadius:5,overflow:"hidden",boxShadow:"inset 0 1px 3px rgba(0,0,0,0.3)"}}>
+              <div className="gold-gradient" style={{height:"100%",width:`${xpProgress}%`,borderRadius:5,transition:"width 1.2s cubic-bezier(0.34, 1.56, 0.64, 1)"}}/>
+            </div>
+          </div>
+          
+          <div className="animate-fadeInUp grid-responsive" style={{marginBottom:32}}>
+            {[{label:"Mastered",value:user.mastered||0,icon:"🏆"},{label:"Streak",value:`${user.streak||0}d`,icon:"🔥"},{label:"Quizzes",value:user.totalQuizzes||0,icon:"🎯"}].map(s=>(
+              <div key={s.label} className="stat-card">
+                <div style={{fontSize:28,marginBottom:8}}>{s.icon}</div>
+                <div className="sora" style={{fontSize:24,fontWeight:800,color:"#FCD34D"}}>{s.value}</div>
+                <div style={{fontSize:13,color:"#94A3B8",fontWeight:500,marginTop:4}}>{s.label}</div>
+              </div>
+            ))}
+          </div>
+          
+          <button className="btn-gold animate-pulse-slow" onClick={onPlayNow} style={{width:"100%",padding:"22px",borderRadius:20,fontSize:20,marginBottom:24,boxShadow:"0 10px 30px rgba(245,200,66,0.2)"}}>🌍 Play Now</button>
+          
+          <div className="glass-bright glow-gold animate-fadeInUp" style={{marginBottom:32,padding:"24px",cursor:"pointer",position:"relative",overflow:"hidden",animationDelay:"0.15s",borderRadius:20}} onClick={()=>onNavigate("mapquest-difficulty")}>
+            <div style={{position:"absolute",top:-20,right:-20,fontSize:100,opacity:0.04,pointerEvents:"none",transform:"rotate(10deg)"}}>🗺️</div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div style={{position:"relative",zIndex:1}}>
+                <div className="sora" style={{fontSize:18,fontWeight:800,color:"#22C55E",marginBottom:6,display:"flex",alignItems:"center"}}>🗺️ Map Quest<span className="new-badge">NEW</span></div>
+                <div style={{fontSize:14,color:"#CBD5E1",fontWeight:500,maxWidth:240}}>Find highlighted countries on the world map directly</div>
+              </div>
+              <div style={{background:"linear-gradient(135deg,#22C55E,#15803D)",borderRadius:12,padding:"10px 20px",flexShrink:0,boxShadow:"0 4px 15px rgba(34,197,94,0.4)"}}>
+                <span className="sora" style={{fontSize:14,fontWeight:800,color:"white"}}>PLAY</span>
+              </div>
+            </div>
+          </div>
+          
+          <div className="animate-fadeInUp" style={{animationDelay:"0.2s"}}>
+            <h2 className="sora" style={{fontSize:14,fontWeight:800,marginBottom:16,color:"#94A3B8",letterSpacing:"1.5px"}}>MORE MODES</h2>
+            <div className="grid-responsive desktop-grid-4">
+              {QUIZ_MODES.filter(m=>m.id!=="mapquest").map(m=>(
+                <div key={m.id} className="mode-card" onClick={()=>onNavigate("quiz-mode-select")}>
+                  <div style={{fontSize:32,marginBottom:12}}>{m.icon}</div>
+                  <div className="sora" style={{fontSize:16,fontWeight:800,marginBottom:6,color:"#F1F5F9"}}>{m.name}</div>
+                  <div style={{fontSize:13,color:"#94A3B8",lineHeight:1.5}}>{m.desc}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ─── QUIZ MODE SELECT ─────────────────────────────────────────────────────────
+    function QuizModeSelect({onBack,onStartQuiz,onMapQuest}){
+      const [selected,setSelected]=useState(null);
+      return(
+        <div className="app-container">
+          <div style={{display:"flex",alignItems:"center",gap:16,marginBottom:32}} className="animate-fadeInUp">
+            <button className="btn-ghost" onClick={onBack} style={{padding:"10px 16px",borderRadius:12,fontSize:14}}>← Back</button>
+            <h2 className="sora" style={{fontSize:26,fontWeight:800}}>Choose Your <span className="gold-text">Mode</span></h2>
+          </div>
+          <div className="grid-responsive desktop-grid-3">
+            {QUIZ_MODES.map((m,i)=>(
+              <div key={m.id} className={`mode-card animate-fadeInUp ${selected===m.id&&m.id!=="mapquest"?"glass-bright glow-gold":""}`}
+                style={{animationDelay:`${i*0.06}s`,border:selected===m.id&&m.id!=="mapquest"?`2px solid ${m.color}`:undefined}}
+                onClick={()=>{ if(m.id==="mapquest"){onMapQuest();return;} setSelected(m.id); }}>
+                {m.isNew&&<span className="new-badge" style={{position:"absolute",top:16,right:16}}>NEW</span>}
+                <div style={{fontSize:36,marginBottom:12}}>{m.icon}</div>
+                <div className="sora" style={{fontSize:16,fontWeight:800,marginBottom:6}}>{m.name}</div>
+                <div style={{fontSize:13,color:"#94A3B8",lineHeight:1.5,marginBottom:selected===m.id?16:0}}>{m.desc}</div>
+              </div>
+            ))}
+          </div>
+          {selected&&(
+            <div className="animate-slideUp" style={{marginTop:32}}>
+              <h3 className="sora" style={{fontSize:14,color:"#94A3B8",marginBottom:16,letterSpacing:"1.5px",fontWeight:800}}>DIFFICULTY</h3>
+              <div style={{display:"flex",flexDirection:"column",gap:12}}>
+                {[{id:"easy",label:"Easy 🌟",desc:"G20 + popular countries",countries:COUNTRIES.filter(c=>["US","GB","FR","DE","JP","CN","IN","BR","AU","CA","MX","RU","IT","ES","KR","ZA","AR","NG","EG","TR"].includes(c.id))},{id:"medium",label:"Medium 🔥",desc:"All major countries",countries:COUNTRIES.filter(c=>c.population>5000)},{id:"hard",label:"Hard 💀",desc:"All 60 countries",countries:COUNTRIES}].map(d=>(
+                  <button key={d.id} className="btn-ghost" style={{padding:"20px 24px",borderRadius:16,textAlign:"left",display:"flex",justifyContent:"space-between",alignItems:"center"}} onClick={()=>onStartQuiz(selected,d.countries,d.id)}>
+                    <div><div className="sora" style={{fontSize:16,fontWeight:800}}>{d.label}</div><div style={{fontSize:13,color:"#94A3B8",marginTop:4,fontWeight:500}}>{d.desc}</div></div>
+                    <div style={{fontSize:14,color:"#94A3B8",fontWeight:600}}>{d.countries.length} countries</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // ─── STANDARD QUIZ SCREEN ─────────────────────────────────────────────────────
+    function QuizScreen({mode,pool,difficulty,onComplete,onBack}){
+      const [qIndex,setQIndex]=useState(0);
+      const [questions,setQuestions]=useState([]);
+      const [selected,setSelected]=useState(null);
+      const [answered,setAnswered]=useState(false);
+      const [score,setScore]=useState(0);
+      const [lives,setLives]=useState(3);
+      const [streak,setStreak]=useState(0);
+      const [timeLeft,setTimeLeft]=useState(15);
+      const [showFact,setShowFact]=useState(false);
+      const [xpFloats,setXpFloats]=useState([]);
+      const [answers,setAnswers]=useState([]);
+      const timerRef=useRef(null);
+
+      useEffect(()=>{const qs=[],used=new Set();for(let i=0;i<10;i++){const q=generateQuestion(mode,pool,used);if(q){qs.push(q);used.add(q.country.id);}}setQuestions(qs);},[]);
+      useEffect(()=>{if(!questions.length||answered)return;if(timeLeft<=0){handleAnswer(null,null);return;}timerRef.current=setTimeout(()=>setTimeLeft(t=>t-1),1000);return()=>clearTimeout(timerRef.current);},[timeLeft,answered,questions]);
+      
+      const q=questions[qIndex];
+      const diffMult={easy:1,medium:1.5,hard:2}[difficulty]||1;
+      
+      const handleAnswer=useCallback((option,event)=>{
+        if(answered||!q)return;clearTimeout(timerRef.current);setAnswered(true);setSelected(option);
+        const isCorrect=option===q.correct,newStreak=isCorrect?streak+1:0;
+        const streakMult=newStreak>=10?3:newStreak>=5?2:newStreak>=3?1.5:1;
+        const xpGained=isCorrect?Math.round((100+(timeLeft>10?50:timeLeft>5?25:0))*diffMult*streakMult):0;
+        setStreak(newStreak);
+        if(isCorrect){setScore(s=>s+xpGained);if(event){const r=event.currentTarget.getBoundingClientRect();setXpFloats(f=>[...f,{id:Date.now(),x:r.left+r.width/2-30,y:r.top-10,amount:xpGained}]);}}
+        else{setLives(l=>l-1);}
+        setAnswers(a=>[...a,{country:q.country,correct:isCorrect,answer:option,correctAnswer:q.correct}]);
+        setShowFact(true);
+        setTimeout(()=>{
+          setShowFact(false);
+          const nl=isCorrect?lives:lives-1;
+          if(qIndex+1>=questions.length||nl<=0){const fa=[...answers,{country:q.country,correct:isCorrect,answer:option,correctAnswer:q.correct}];onComplete({score:score+xpGained,answers:fa,streak:Math.max(streak,newStreak)});}
+          else{setQIndex(i=>i+1);setSelected(null);setAnswered(false);setTimeLeft(15);}
+        },2500);
+      },[answered,q,timeLeft,streak,lives,score,answers,qIndex,questions]);
+
+      if(!q)return<div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"80vh"}}><div style={{textAlign:"center"}}><div style={{fontSize:56,animation:"rotate 1.5s linear infinite",display:"inline-block"}}>🌍</div><p style={{marginTop:16,color:"#94A3B8",fontSize:18,fontWeight:600}}>Loading Quiz...</p></div></div>;
+      const tp=(timeLeft/15)*100,td=timeLeft<=5;
+      
+      return(
+        <div className="app-container quiz-container">
+          {xpFloats.map(f=><XPFloat key={f.id} x={f.x} y={f.y} amount={f.amount} onDone={()=>setXpFloats(fs=>fs.filter(x=>x.id!==f.id))}/>)}
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:20}}>
+            <button className="btn-ghost" onClick={onBack} style={{padding:"8px 14px",borderRadius:10,fontSize:14}}>✕ Quit</button>
+            <div className="sora" style={{fontSize:16,fontWeight:800,color:"#94A3B8",letterSpacing:"1px"}}>Q {qIndex+1}<span style={{color:"#FCD34D"}}> / {questions.length}</span></div>
+            <div style={{display:"flex",gap:6}}>{Array.from({length:3},(_,i)=><span key={i} style={{fontSize:20,opacity:i<lives?1:0.2,transition:"opacity 0.3s"}}>❤️</span>)}</div>
+          </div>
+          
+          <div style={{height:8,background:"rgba(255,255,255,0.06)",borderRadius:4,marginBottom:24,overflow:"hidden",boxShadow:"inset 0 1px 2px rgba(0,0,0,0.3)"}}>
+            <div style={{height:"100%",borderRadius:4,background:td?"linear-gradient(90deg,#EF4444,#F97316)":"linear-gradient(90deg,#FCD34D,#F97316)",width:`${tp}%`,transition:"width 1s linear"}}/>
+          </div>
+          
+          <div style={{display:"flex",justifyContent:"space-between",marginBottom:24,gap:12}}>
+            <div className="glass" style={{padding:"10px 18px",flex:1,textAlign:"center"}}><span className="sora" style={{fontSize:14,fontWeight:800,color:"#FCD34D"}}>⭐ {score.toLocaleString()}</span></div>
+            {streak>=3&&<div className="glass animate-scaleIn" style={{padding:"10px 18px",flex:1,textAlign:"center"}}><span className="sora" style={{fontSize:14,fontWeight:800,color:"#F97316"}}>🔥 ×{streak}</span></div>}
+            <div className="glass" style={{padding:"10px 18px",flex:1,textAlign:"center"}}><span style={{fontSize:14,color:"#CBD5E1",fontWeight:600}}>{timeLeft}s</span></div>
+          </div>
+          
+          <div className="glass animate-scaleIn" style={{padding:"32px 24px",marginBottom:24,textAlign:"center",borderRadius:24}} key={qIndex}>
+            <p style={{fontSize:20,color:"#F1F5F9",fontWeight:600,marginBottom:q.image?24:0,lineHeight:1.5}}>{q.question}</p>
+            {q.image&&<div style={{display:"flex",justifyContent:"center"}}><img src={q.image} alt="flag" style={{width:200,height:133,objectFit:"cover",borderRadius:12,border:"3px solid rgba(255,255,255,0.15)",boxShadow:"0 15px 35px rgba(0,0,0,0.5)"}}/></div>}
+          </div>
+          
+          <div className="options-grid">
+            {q.options.map((opt,i)=>{
+              let cls="option-card";
+              if(answered){
+                if(opt===q.correct)cls+=" reveal-correct";
+                if(opt===selected&&opt!==q.correct)cls+=" wrong";
+                if(opt===selected&&opt===q.correct)cls+=" correct";
+                cls+=" disabled";
+              }
+              return(
+                <button key={i} className={cls} onClick={(e)=>handleAnswer(opt,e)} style={{opacity:answered&&opt!==q.correct&&opt!==selected?0.4:1,justifyContent:"space-between"}}>
+                  <span>{opt}</span>
+                  {answered&&opt===q.correct&&<span style={{fontSize:20}}>✅</span>}
+                  {answered&&opt===selected&&opt!==q.correct&&<span style={{fontSize:20}}>❌</span>}
+                </button>
+              );
+            })}
+          </div>
+          
+          {showFact&&q.country&&(
+            <div className="glass-bright animate-slideUp" style={{marginTop:24,padding:"20px",borderLeft:"4px solid #FCD34D"}}>
+              <div className="sora" style={{fontSize:13,color:"#FCD34D",fontWeight:800,marginBottom:8,letterSpacing:"1px"}}>💡 DID YOU KNOW? · {q.country.name.toUpperCase()}</div>
+              <p style={{fontSize:15,color:"#CBD5E1",lineHeight:1.6}}>{q.country.funFact}</p>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // ─── RESULTS SCREEN ───────────────────────────────────────────────────────────
+    function ResultsScreen({result,difficulty,onPlayAgain,onMenu}){
+      const{score,answers,streak}=result;
+      const correct=answers.filter(a=>a.correct).length,total=answers.length,pct=Math.round((correct/total)*100);
+      const isPerf=pct===100;
+      const grade=pct===100?{icon:"🥇",label:"PERFECT!",color:"#FCD34D"}:pct>=80?{icon:"🎯",label:"SHARP!",color:"#22C55E"}:pct>=60?{icon:"🌟",label:"GOOD!",color:"#4F8EF7"}:{icon:"📚",label:"KEEP LEARNING",color:"#F97316"};
+      return(
+        <div className="app-container" style={{maxWidth:600}}>
+          {isPerf&&<Confetti/>}
+          <div style={{textAlign:"center",marginBottom:40}} className="animate-fadeInUp">
+            <ProgressRing percent={pct} size={180} stroke={14}>
+              <div><div style={{fontSize:42,marginBottom:4}}>{grade.icon}</div><div className="sora" style={{fontSize:28,fontWeight:800,color:grade.color,textShadow:`0 0 20px ${grade.color}40`}}>{pct}%</div></div>
+            </ProgressRing>
+            <div className="sora" style={{fontSize:28,fontWeight:800,marginTop:24,color:grade.color,letterSpacing:"1px"}}>{grade.label}</div>
+            <div style={{color:"#94A3B8",marginTop:8,fontSize:16,fontWeight:500}}>{correct} out of {total} correct</div>
+          </div>
+          
+          <div className="glass animate-fadeInUp" style={{padding:"32px",marginBottom:24,textAlign:"center",animationDelay:"0.1s"}}>
+            <div className="sora" style={{fontSize:13,color:"#94A3B8",marginBottom:10,letterSpacing:"2px",fontWeight:800}}>TOTAL SCORE EARNED</div>
+            <div className="sora" style={{fontSize:56,fontWeight:800}}><span className="gold-text">{score.toLocaleString()}</span></div>
+            <div style={{fontSize:14,color:"#64748B",marginTop:4,fontWeight:600}}>XP Points</div>
+            {streak>=3&&<div style={{marginTop:16,padding:"10px 20px",background:"rgba(249,115,22,0.1)",borderRadius:12,display:"inline-block",border:"1px solid rgba(249,115,22,0.2)"}}><span style={{color:"#F97316",fontWeight:700,fontSize:14}}>🔥 Best streak multiplier: {streak}x</span></div>}
+          </div>
+          
+          <div className="animate-fadeInUp grid-3" style={{marginBottom:24,animationDelay:"0.12s"}}>
+            <div className="stat-card" style={{padding:"20px"}}><div style={{fontSize:26,color:"#22C55E",fontWeight:800,marginBottom:4}}>{correct}</div><div style={{fontSize:12,color:"#94A3B8",fontWeight:600,textTransform:"uppercase"}}>Correct</div></div>
+            <div className="stat-card" style={{padding:"20px"}}><div style={{fontSize:26,color:"#EF4444",fontWeight:800,marginBottom:4}}>{total-correct}</div><div style={{fontSize:12,color:"#94A3B8",fontWeight:600,textTransform:"uppercase"}}>Wrong</div></div>
+            <div className="stat-card" style={{padding:"20px"}}><div style={{fontSize:22,color:"#4F8EF7",fontWeight:800,marginBottom:4}}>{difficulty?.toUpperCase()?.[0]||"?"}</div><div style={{fontSize:12,color:"#94A3B8",fontWeight:600,textTransform:"uppercase"}}>Level</div></div>
+          </div>
+          
+          {answers.filter(a=>!a.correct).length>0&&<div className="glass animate-fadeInUp" style={{padding:"24px",marginBottom:32}}>
+            <h3 className="sora" style={{fontSize:15,color:"#EF4444",marginBottom:16,fontWeight:800}}>😅 REVIEW THESE MISTAKES</h3>
+            {answers.filter(a=>!a.correct).map((a,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:14,padding:"12px 0",borderBottom:i<answers.filter(x=>!x.correct).length-1?"1px solid rgba(255,255,255,0.06)":"none"}}><img src={FLAG_URL(a.country.id)} alt="" style={{width:28,height:20,objectFit:"cover",borderRadius:4,boxShadow:"0 2px 4px rgba(0,0,0,0.2)"}}/><div style={{flex:1}}><span style={{fontSize:15,fontWeight:600,color:"#F1F5F9"}}>{a.country.name}</span>{a.correctAnswer&&<span style={{fontSize:14,color:"#94A3B8",marginLeft:12,fontWeight:500}}>→ <span style={{color:"#22C55E"}}>{a.correctAnswer}</span></span>}</div></div>)}
+          </div>}
+          
+          <div style={{display:"flex",flexDirection:"column",gap:16}}>
+            <button className="btn-gold" style={{padding:"20px",borderRadius:16,fontSize:18}} onClick={onPlayAgain}>🔄 Play Again</button>
+            <button className="btn-ghost" style={{padding:"18px",borderRadius:16,fontSize:16}} onClick={onMenu}>← Back to Menu</button>
+          </div>
+        </div>
+      );
+    }
+
+    // ─── LEADERBOARD ──────────────────────────────────────────────────────────────
+    const FAKE_PLAYERS=[{rank:1,name:"GeoKing99",country:"US",xp:98420,avatar:"👑"},{rank:2,name:"MapMaestro",country:"GB",xp:87300,avatar:"🗺️"},{rank:3,name:"AtlasWizard",country:"JP",xp:76100,avatar:"⚡"},{rank:4,name:"CapitalPro",country:"DE",xp:65800,avatar:"🏛️"},{rank:5,name:"FlagFanatic",country:"FR",xp:54200,avatar:"🏳️"},{rank:6,name:"BorderBoss",country:"IN",xp:43100,avatar:"🌐"},{rank:7,name:"GlobeTrekker",country:"BR",xp:38400,avatar:"✈️"},{rank:8,name:"QuizQueen",country:"AU",xp:29700,avatar:"👸"},{rank:9,name:"WorldWatcher",country:"CA",xp:21500,avatar:"🔭"},{rank:10,name:"ContinentCzar",country:"ZA",xp:18900,avatar:"🦁"}];
+    function LeaderboardScreen({user}){
+      const [tab,setTab]=useState("Global");
+      const podC=["#FCD34D","#94A3B8","#D97706"],podI=["🥇","🥈","🥉"];
+      return(
+        <div className="app-container" style={{maxWidth:600}}>
+          <h2 className="sora animate-fadeInUp" style={{fontSize:32,fontWeight:800,marginBottom:24}}>🏆 <span className="gold-text">Leaderboard</span></h2>
+          <div style={{display:"flex",gap:8,marginBottom:32,background:"rgba(255,255,255,0.03)",padding:"6px",borderRadius:"14px"}}>{["Global","This Week","Today"].map(t=><button key={t} className={`nav-tab ${tab===t?"active":""}`} style={{flex:1}} onClick={()=>setTab(t)}>{t}</button>)}</div>
+          
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12,marginBottom:32,alignItems:"end"}}>
+            {[FAKE_PLAYERS[1],FAKE_PLAYERS[0],FAKE_PLAYERS[2]].map((p,i)=>{
+              const ar=i===0?2:i===1?1:3; const col=podC[ar-1]; const ph=ar===1?110:ar===2?85:70;
+              return(
+                <div key={p.rank} className="animate-fadeInUp" style={{animationDelay:`${i*0.08}s`,textAlign:"center"}}>
+                  <div style={{fontSize:36,marginBottom:6,filter:`drop-shadow(0 4px 8px ${col}40)`}}>{p.avatar}</div>
+                  <div className="sora" style={{fontSize:14,fontWeight:800,color:col,marginBottom:4}}>{podI[ar-1]}</div>
+                  <div style={{fontSize:13,fontWeight:700,marginBottom:2,color:"#F1F5F9"}}>{p.name}</div>
+                  <div style={{fontSize:12,color:"#94A3B8",fontWeight:600}}>{(p.xp/1000).toFixed(1)}k XP</div>
+                  <div style={{height:ph,background:`linear-gradient(to top,${col}15,${col}40)`,border:`1px solid ${col}60`,borderBottom:"none",borderRadius:"12px 12px 0 0",marginTop:12,position:"relative",overflow:"hidden"}}>
+                     <div style={{position:"absolute",top:0,left:0,right:0,height:"2px",background:col,boxShadow:`0 0 10px ${col}`}}></div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          
+          <div className="glass" style={{padding:"10px"}}>
+            {FAKE_PLAYERS.slice(3).map((p,i)=>(
+              <div key={p.rank} className="leaderboard-row animate-fadeInUp" style={{animationDelay:`${(i+3)*0.05}s`}}>
+                <div className="sora" style={{fontSize:15,fontWeight:800,color:"#64748B",width:32}}>#{p.rank}</div>
+                <div style={{fontSize:24,margin:"0 16px"}}>{p.avatar}</div>
+                <div style={{flex:1}}>
+                  <div className="sora" style={{fontSize:15,fontWeight:700,color:"#F1F5F9",marginBottom:2}}>{p.name}</div>
+                  <div style={{fontSize:12,color:"#94A3B8",fontWeight:500}}><img src={FLAG_URL(p.country)} alt="" style={{width:16,height:11,objectFit:"cover",borderRadius:2,marginRight:6,verticalAlign:"middle",boxShadow:"0 1px 3px rgba(0,0,0,0.3)"}}/>{p.country}</div>
+                </div>
+                <div className="sora" style={{fontSize:15,fontWeight:800,color:"#FCD34D"}}>{p.xp.toLocaleString()}</div>
+              </div>
+            ))}
+            <div style={{textAlign:"center",color:"#475569",padding:"12px 0",fontSize:24,letterSpacing:"4px"}}>···</div>
+            <div className="leaderboard-row me" style={{borderWidth:"2px",boxShadow:"0 8px 20px rgba(245,200,66,0.15)"}}>
+              <div className="sora" style={{fontSize:15,fontWeight:800,color:"#FCD34D",width:32}}>#47</div>
+              <div style={{fontSize:24,margin:"0 16px"}}>🌍</div>
+              <div style={{flex:1}}>
+                <div className="sora" style={{fontSize:15,fontWeight:700,marginBottom:2}}>{user.name} <span style={{fontSize:11,color:"#FCD34D",background:"rgba(245,200,66,0.15)",padding:"2px 6px",borderRadius:"6px",marginLeft:8,verticalAlign:"middle"}}>YOU</span></div>
+                <div style={{fontSize:12,color:"#94A3B8",fontWeight:500}}>Keep climbing!</div>
+              </div>
+              <div className="sora" style={{fontSize:16,fontWeight:800,color:"#FCD34D"}}>{user.xp.toLocaleString()}</div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ─── PROFILE ─────────────────────────────────────────────────────────────────
+    function ProfileScreen({user}){
+      const rank=getRank(user.xp),nextRank=getNextRank(user.xp),xpP=nextRank?((user.xp-rank.min)/(nextRank.min-rank.min))*100:100;
+      const BADGES=[{id:"f",icon:"🏳️",name:"Flag Master",desc:"Play 5 quizzes",earned:(user.totalQuizzes||0)>=5},{id:"s",icon:"🔥",name:"Streak Warrior",desc:"Reach a 3-day streak",earned:(user.streak||0)>=3},{id:"p",icon:"🥇",name:"Perfectionist",desc:"Get a perfect score",earned:(user.perfectScores||0)>=1},{id:"m",icon:"🗺️",name:"Map Explorer",desc:"Play Map Quest mode",earned:(user.mapQuestPlayed||0)>=1},{id:"g",icon:"✈️",name:"Globetrotter",desc:"Visit all continents",earned:false},{id:"c",icon:"🏛️",name:"Capital King",desc:"Learn all capitals",earned:false}];
+      return(
+        <div className="app-container" style={{maxWidth:600}}>
+          <div className="glass animate-fadeInUp" style={{padding:"32px 24px",marginBottom:24,textAlign:"center",position:"relative",overflow:"hidden"}}>
+            <div style={{position:"absolute",top:0,left:0,right:0,height:"80px",background:"linear-gradient(180deg, rgba(245,200,66,0.1) 0%, transparent 100%)"}}></div>
+            <div style={{width:90,height:90,borderRadius:"50%",background:"linear-gradient(135deg,#FCD34D,#D97706)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:40,margin:"0 auto 16px",boxShadow:"0 10px 30px rgba(245,200,66,0.4)",border:"4px solid #050810",position:"relative",zIndex:1}}>🌍</div>
+            <h2 className="sora" style={{fontSize:28,fontWeight:800,position:"relative",zIndex:1}}>{user.name}</h2>
+            <div style={{display:"inline-flex",alignItems:"center",gap:8,padding:"8px 18px",borderRadius:20,background:"rgba(245,200,66,0.15)",border:"1px solid rgba(245,200,66,0.4)",marginTop:12,position:"relative",zIndex:1}}>
+               <span style={{fontSize:16}}>⭐</span><span className="sora" style={{fontSize:14,fontWeight:800,color:"#FCD34D"}}>Lv.{rank.level} {rank.name}</span>
+            </div>
+            <div style={{marginTop:24,position:"relative",zIndex:1}}>
+               <div style={{display:"flex",justifyContent:"space-between",fontSize:13,color:"#94A3B8",marginBottom:8,fontWeight:600}}><span>{user.xp.toLocaleString()} XP</span>{nextRank&&<span>Next: {nextRank.name}</span>}</div>
+               <div style={{height:10,background:"rgba(255,255,255,0.08)",borderRadius:5,overflow:"hidden",boxShadow:"inset 0 1px 3px rgba(0,0,0,0.4)"}}><div className="gold-gradient" style={{height:"100%",width:`${xpP}%`,borderRadius:5}}/></div>
+            </div>
+          </div>
+          
+          <div className="animate-fadeInUp grid-responsive" style={{marginBottom:32}}>
+            {[{label:"Total Quizzes",value:user.totalQuizzes||0,icon:"🎯"},{label:"Countries Mastered",value:user.mastered||0,icon:"🌍"},{label:"Best Streak",value:`${user.streak||0}d`,icon:"🔥"},{label:"Perfect Scores",value:user.perfectScores||0,icon:"🥇"}].map(s=>
+              <div key={s.label} className="stat-card" style={{padding:"24px 16px"}}>
+                <div style={{fontSize:28,marginBottom:8}}>{s.icon}</div>
+                <div className="sora" style={{fontSize:24,fontWeight:800,color:"#FCD34D"}}>{s.value}</div>
+                <div style={{fontSize:13,color:"#94A3B8",marginTop:4,fontWeight:500}}>{s.label}</div>
+              </div>
+            )}
+          </div>
+          
+          <h3 className="sora animate-fadeInUp" style={{fontSize:18,fontWeight:800,marginBottom:16,color:"#F1F5F9"}}>🏅 Achievements</h3>
+          <div className="animate-fadeInUp grid-responsive desktop-grid-3">
+            {BADGES.map(b=>
+              <div key={b.id} className="glass" style={{padding:"20px 16px",textAlign:"center",opacity:b.earned?1:0.5,border:b.earned?"1px solid rgba(245,200,66,0.4)":"1px solid rgba(255,255,255,0.06)",boxShadow:b.earned?"0 8px 25px rgba(245,200,66,0.15)":"none",transition:"all 0.3s"}}>
+                 <div style={{fontSize:36,marginBottom:12,filter:b.earned?"drop-shadow(0 4px 10px rgba(0,0,0,0.3))":"grayscale(100%)"}}>{b.icon}</div>
+                 <div className="sora" style={{fontSize:14,fontWeight:800,color:b.earned?"#FCD34D":"#94A3B8",marginBottom:6}}>{b.name}</div>
+                 <div style={{fontSize:12,color:"#64748B",lineHeight:1.4,fontWeight:500}}>{b.desc}</div>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // ─── ONBOARDING ───────────────────────────────────────────────────────────────
+    function OnboardingScreen({onComplete}){
+      const [step,setStep]=useState(0);const [name,setName]=useState("");
+      const slides=[
+        {icon:<div style={{fontSize:100,animation:"float 3s ease-in-out infinite",filter:"drop-shadow(0 10px 20px rgba(0,0,0,0.5))"}}>🌍</div>,title:"Welcome to GeoMaster",subtitle:"How well do you know our world?",action:"Get Started"},
+        {icon:<div style={{fontSize:90,filter:"drop-shadow(0 10px 20px rgba(0,0,0,0.5))"}}>🗺️</div>,title:"Quiz Your Geography",subtitle:"Flags, capitals, Map Quest, currencies — master them all across 60 countries.",action:"Next"},
+        {icon:null,title:"What's your name, Explorer?",subtitle:"Set up your profile to track progress and compete globally.",isNameStep:true}
+      ];
+      const slide=slides[step];
+      return(
+        <div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"40px 32px",textAlign:"center",position:"relative",overflow:"hidden",zIndex:1}}>
+          <div className="animate-scaleIn glass" key={step} style={{position:"relative",zIndex:2,maxWidth:420,width:"100%",padding:"48px 32px",borderRadius:32,boxShadow:"0 20px 60px rgba(0,0,0,0.5)"}}>
+            {slide.icon&&<div style={{marginBottom:40}}>{slide.icon}</div>}
+            <h1 className="sora" style={{fontSize:36,fontWeight:800,marginBottom:20,lineHeight:1.2}}><span className="gold-text">{slide.title.split(" ").slice(0,1).join(" ")}</span>{" "}{slide.title.split(" ").slice(1).join(" ")}</h1>
+            <p style={{fontSize:16,color:"#94A3B8",lineHeight:1.6,marginBottom:48,fontWeight:500}}>{slide.subtitle}</p>
+            {slide.isNameStep&&<input type="text" placeholder="Enter your username…" value={name} onChange={e=>setName(e.target.value)} style={{width:"100%",padding:"18px 24px",marginBottom:24,fontSize:18,textAlign:"center"}}/>}
+            <button className="btn-gold" style={{width:"100%",padding:"20px",borderRadius:16,fontSize:18}} onClick={()=>{if(step<slides.length-1)setStep(s=>s+1);else onComplete(name||"Explorer");}} disabled={slide.isNameStep&&!name.trim()}>
+              {step===slides.length-1?"🚀 Begin Adventure":(slide.action||"Next")}
+            </button>
+            <div style={{display:"flex",justifyContent:"center",gap:10,marginTop:32}}>
+              {slides.map((_,i)=><div key={i} style={{width:i===step?24:8,height:8,borderRadius:4,background:i===step?"#FCD34D":"rgba(255,255,255,0.15)",transition:"all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)"}}/>)}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ─── BOTTOM NAV ───────────────────────────────────────────────────────────────
+    function BottomNav({active,onNavigate}){
+      return(
+        <nav className="bottom-nav">
+          {[{id:"home",icon:"🏠",label:"Home"},{id:"quiz-mode-select",icon:"🎯",label:"Play"},{id:"leaderboard",icon:"🏆",label:"Ranks"},{id:"profile",icon:"👤",label:"Profile"}].map(item=>(
+            <div key={item.id} className={`bnav-item ${active===item.id?"active":""}`} onClick={()=>onNavigate(item.id)}>
+              <span className="bnav-icon">{item.icon}</span><span className="bnav-label">{item.label}</span>
+            </div>
+          ))}
+        </nav>
+      );
+    }
+
+    // ─── ROOT ─────────────────────────────────────────────────────────────────────
+    function loadUser(){try{const s=localStorage.getItem("gm_user3");if(s)return JSON.parse(s);}catch{}return null;}
+    function saveUser(u){try{localStorage.setItem("gm_user3",JSON.stringify(u));}catch{}}
+
+    function App(){
+      const [user,setUser]=useState(null);
+      const [screen,setScreen]=useState("onboarding");
+      const [quizConfig,setQuizConfig]=useState(null);
+      const [mapDiffConfig,setMapDiffConfig]=useState(null);
+      const [quizResult,setQuizResult]=useState(null);
+      const [lastScreen,setLastScreen]=useState(null);
+
+      useEffect(()=>{const s=loadUser();if(s){setUser(s);setScreen("home");}},[]);
+
+      const updateUser=u=>setUser(prev=>{const next={...prev,...u};saveUser(next);return next;});
+
+      const handleOnboardingComplete=n=>{
+        const u={name:n,xp:0,streak:0,totalQuizzes:0,mastered:0,perfectScores:0,mapQuestPlayed:0};
+        setUser(u);saveUser(u);setScreen("home");
+      };
+      const handleStartQuiz=(mode,pool,difficulty)=>{setQuizConfig({mode,pool,difficulty});setLastScreen("quiz");setScreen("quiz");};
+      const handleStartMapQuest=cfg=>{setMapDiffConfig(cfg);setLastScreen("mapquest");setScreen("mapquest");};
+      
+      const handleQuizComplete=result=>{
+        const correct=result.answers.filter(a=>a.correct).length,isPerfect=correct===result.answers.length;
+        updateUser({xp:(user?.xp||0)+result.score,totalQuizzes:(user?.totalQuizzes||0)+1,mastered:(user?.mastered||0)+correct,perfectScores:(user?.perfectScores||0)+(isPerfect?1:0),streak:Math.max(user?.streak||0,result.streak)});
+        setQuizResult(result);setScreen("results");
+      };
+      
+      const handleMapQuestComplete=result=>{
+        const correct=result.answers.filter(a=>a.correct).length,isPerfect=correct===result.answers.length;
+        updateUser({xp:(user?.xp||0)+result.score,totalQuizzes:(user?.totalQuizzes||0)+1,mastered:(user?.mastered||0)+correct,perfectScores:(user?.perfectScores||0)+(isPerfect?1:0),streak:Math.max(user?.streak||0,result.streak),mapQuestPlayed:(user?.mapQuestPlayed||0)+1});
+        setQuizResult(result);setScreen("results");
+      };
+
+      const navigate=s=>setScreen(s);
+      const hideNav=["quiz","mapquest","onboarding","mapquest-difficulty"].includes(screen);
+
+      if(screen==="onboarding") return(
+        <React.Fragment>
+          <style>{css}</style>
+          <div className="dotgrid-bg" style={{position:"fixed",inset:0,opacity:0.2,pointerEvents:"none"}}></div>
+          <div className="ambient-blob blob-1"></div><div className="ambient-blob blob-2"></div>
+          <OnboardingScreen onComplete={handleOnboardingComplete}/>
+        </React.Fragment>
+      );
+
+      return(
+        <React.Fragment>
+          <style>{css}</style>
+          <div className="dotgrid-bg" style={{position:"fixed",inset:0,opacity:0.2,pointerEvents:"none",zIndex:0}}></div>
+          <div className="ambient-blob blob-1"></div><div className="ambient-blob blob-2"></div>
+          
+          <div className={`app-wrapper ${!hideNav ? "has-nav" : ""}`}>
+            {screen==="home"&&user&&<HomeScreen user={user} onNavigate={navigate} onPlayNow={()=>navigate("quiz-mode-select")}/>}
+            {screen==="quiz-mode-select"&&<QuizModeSelect onBack={()=>navigate("home")} onStartQuiz={handleStartQuiz} onMapQuest={()=>navigate("mapquest-difficulty")}/>}
+            {screen==="mapquest-difficulty"&&<MapQuizDifficultyScreen onBack={()=>navigate("quiz-mode-select")} onStart={handleStartMapQuest}/>}
+            {screen==="mapquest"&&mapDiffConfig&&<MapQuizScreen diffConfig={mapDiffConfig} onComplete={handleMapQuestComplete} onBack={()=>navigate("mapquest-difficulty")}/>}
+            {screen==="quiz"&&quizConfig&&<QuizScreen mode={quizConfig.mode} pool={quizConfig.pool} difficulty={quizConfig.difficulty} onComplete={handleQuizComplete} onBack={()=>navigate("home")}/>}
+            {screen==="results"&&quizResult&&(
+              <ResultsScreen result={quizResult}
+                difficulty={quizConfig?.difficulty||mapDiffConfig?.id}
+                onPlayAgain={()=>{ if(lastScreen==="mapquest"){setScreen("mapquest");}else{setScreen("quiz");} }}
+                onMenu={()=>{setQuizConfig(null);setMapDiffConfig(null);setLastScreen(null);navigate("home");}}
+              />
+            )}
+            {screen==="leaderboard"&&user&&<LeaderboardScreen user={user}/>}
+            {screen==="profile"&&user&&<ProfileScreen user={user}/>}
+          </div>
+          
+          {!hideNav&&<BottomNav active={screen} onNavigate={navigate}/>}
+        </React.Fragment>
+      );
+    }
+
+    // Mount the Application
+    const root = ReactDOM.createRoot(document.getElementById("root"));
+    root.render(<App />);
+  </script>
+</body>
+</html>
